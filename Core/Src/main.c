@@ -143,6 +143,92 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+ 	  Toggle_LED_NonBlocking(); // Heartbeat LED
+	        int password_trigger = 0; // Reset trigger every loop
+
+	        // --- 1. BLUETOOTH LOGIC ---
+	        if (bluetooth_password_ready) {
+	            bluetooth_password_ready = 0; // Clear flag
+
+	            if (!bt_authenticated) {
+	                // LOGIN GATE
+	                if (strcmp(bt_buffer, "1111") == 0) {
+	                    bt_authenticated = 1;
+	                    BT_Send("\r\n>>> ACCESS GRANTED <<<\r\n");
+	                    Display_Menu();
+	                } else {
+	                    BT_Send("\r\n[!] Incorrect Password. Try again: ");
+	                }
+	            }
+	            else {
+	                // MENU COMMANDS
+	                if (strcmp(bt_buffer, "1") == 0) { // DISARM
+	                    if (current_state != STATE_DISARMED) {
+	                        password_trigger = 1;
+	                        BT_Send("\r\n> Disarming...\r\n");
+	                    } else BT_Send("\r\n> Already Disarmed.\r\n");
+	                }
+	                else if (strcmp(bt_buffer, "2") == 0) { // ARM
+	                    if (current_state == STATE_DISARMED) {
+	                        password_trigger = 1;
+	                        BT_Send("\r\n> Arming...\r\n");
+	                    } else BT_Send("\r\n> Already Armed.\r\n");
+	                }
+	                else if (strcmp(bt_buffer, "3") == 0) { // STATUS
+	                    BT_Send("\r\n--- STATUS ---\r\n");
+	                    if (current_state == STATE_DISARMED) BT_Send("State: DISARMED\r\n");
+	                    else if (current_state == STATE_ARMED) BT_Send("State: ARMED\r\n");
+	                    else BT_Send("State: !! ALARM !!\r\n");
+	                }
+	                else if (strcmp(bt_buffer, "4") == 0) { // RESET ALARM
+	                    if (current_state == STATE_ALARM) {
+	                        password_trigger = 1;
+	                        BT_Send("\r\n> Alarm Reset.\r\n");
+	                    } else BT_Send("\r\n> No Alarm active.\r\n");
+	                }
+	                else if (strcmp(bt_buffer, "5") == 0) { // LOGOUT
+	                    bt_authenticated = 0;
+	                    BT_Send("\r\nLogged out. Enter Password: ");
+	                }
+
+	                if (bt_authenticated) Display_Menu();
+	            }
+	        }
+
+	        // --- 2. PHYSICAL KEYPAD LOGIC ---
+	        if (!lockout_active) {
+	            char key = Keypad_Scan();
+	            if (key != 0) {
+	                if (key == '#') {
+	                    if (strcmp(entered_pass, "1111") == 0) {
+	                        password_trigger = 1;
+	                        failed_attempts = 0;
+	                    } else {
+	                        failed_attempts++;
+	                        if (failed_attempts >= 3) {
+	                            lockout_active = 1;
+	                            lockout_start_time = HAL_GetTick();
+	                            BT_Send("\r\n[!] LOCKOUT ACTIVATED VIA KEYPAD\r\n");
+	                        }
+	                    }
+	                    memset(entered_pass, 0, sizeof(entered_pass));
+	                    pass_index = 0;
+	                    Update_Security_Display(current_state, entered_pass);
+	                } else if (pass_index < 4) {
+	                    entered_pass[pass_index++] = key;
+	                    Update_Security_Display(current_state, entered_pass);
+	                }
+	            }
+	        } else {
+	            // Check if 30s lockout is over
+	            if (HAL_GetTick() - lockout_start_time >= 30000) {
+	                lockout_active = 0;
+	                failed_attempts = 0;
+	            }
+	        }
+
+	        // --- 3. SYSTEM EXECUTION ---
+	        Manage_Alarm_Logic(password_trigger);
 
 
 	  /* USER CODE BEGIN 2 */
