@@ -487,7 +487,59 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void Process_BT_Command(void) {
+    if (strcmp(bt_buffer, "1") == 0) {
+        Manage_Alarm_Logic(1); // Simulate correct pass to toggle state
+        BT_Send("System Toggled via Bluetooth\r\n");
+    } else if (strcmp(bt_buffer, "3") == 0) {
+        if (current_state == STATE_DISARMED) BT_Send("Status: DISARMED\r\n");
+        else if (current_state == STATE_ARMED) BT_Send("Status: ARMED\r\n");
+        else BT_Send("Status: ALARM ACTIVE!\r\n");
+    }
+    Display_Menu(); // Show menu again
+}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART1) {
+        if (rx_data == '\n' || rx_data == '\r') {
+            if (bt_index > 0) { // Only trigger if we actually got data
+                bt_buffer[bt_index] = '\0';
+                bluetooth_password_ready = 1;
+                bt_index = 0;
+            }
+        } else {
+            if (bt_index < 9) {
+                bt_buffer[bt_index++] = rx_data;
+            }
+        }
+        HAL_UART_Receive_IT(&huart1, &rx_data, 1);
+    }
+}
+char Keypad_Scan(void) {
+    uint16_t RowPins[] = {GPIO_PIN_8, GPIO_PIN_9, GPIO_PIN_10, GPIO_PIN_11};
+    uint16_t ColPins[] = {GPIO_PIN_12, GPIO_PIN_13, GPIO_PIN_14, GPIO_PIN_15};
+    char keys[4][4] = {{'1','2','3','A'},{'4','5','6','B'},{'7','8','9','C'},{'*','0','#','D'}};
 
+    static uint8_t button_pressed = 0;
+
+    for (int r = 0; r < 4; r++) {
+        HAL_GPIO_WritePin(GPIOC, RowPins[r], GPIO_PIN_RESET);
+        for (int c = 0; c < 4; c++) {
+            if (HAL_GPIO_ReadPin(GPIOC, ColPins[c]) == GPIO_PIN_RESET) {
+                if (!button_pressed) {
+                    HAL_Delay(50); // Debounce
+                    button_pressed = 1;
+                    HAL_GPIO_WritePin(GPIOC, RowPins[r], GPIO_PIN_SET);
+                    return keys[r][c];
+                }
+                HAL_GPIO_WritePin(GPIOC, RowPins[r], GPIO_PIN_SET);
+                return 0; // Still holding button, don't return key again
+            }
+        }
+        HAL_GPIO_WritePin(GPIOC, RowPins[r], GPIO_PIN_SET);
+    }
+    button_pressed = 0; // No buttons pressed
+    return 0;
+}
 
 
 /* USER CODE END 4 */
