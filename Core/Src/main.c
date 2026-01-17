@@ -540,7 +540,76 @@ char Keypad_Scan(void) {
     button_pressed = 0; // No buttons pressed
     return 0;
 }
+void Manage_Alarm_Logic(int password_correct) {
+    static SystemState last_state = -1; // Force first update
 
+    // 1. Handle State Transitions
+    if (password_correct) {
+        if (current_state == STATE_ARMED || current_state == STATE_ALARM) {
+            current_state = STATE_DISARMED;
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 500);
+        } else {
+            current_state = STATE_ARMED;
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1500);
+        }
+    }
+
+    // 2. Sensor Check
+    if (current_state == STATE_ARMED) {
+        if (HAL_GPIO_ReadPin(GPIOC, IR_SENSOR_PIN) == GPIO_PIN_RESET) {
+            current_state = STATE_ALARM;
+        }
+    }
+
+    // 3. Only update OLED if the state CHANGED
+    if (current_state != last_state) {
+        Update_Security_Display(current_state, entered_pass);
+        last_state = current_state;
+    }
+
+    // 4. Constant Alarm Actions (Buzzer/LED)
+    if (current_state == STATE_ALARM) {
+        static uint32_t last_beep = 0;
+        if (HAL_GetTick() - last_beep > 200) {
+            HAL_GPIO_TogglePin(GPIOC, BUZZER_PIN);
+            HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_13);
+            last_beep = HAL_GetTick();
+        }
+    } else {
+        HAL_GPIO_WritePin(GPIOC, BUZZER_PIN, GPIO_PIN_SET); // Ensure silent
+    }
+}
+void Handle_Error_Feedback(int trigger) {
+    static uint32_t error_start_time = 0;
+    static uint32_t last_blink_time = 0;
+    static int is_error_active = 0;
+
+    if (trigger == 1 && is_error_active == 0) {
+        is_error_active = 1;
+        error_start_time = HAL_GetTick();
+    }
+
+    if (is_error_active) {
+        if (HAL_GetTick() - last_blink_time >= 100) {
+            HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_13); // Rapid blink
+            last_blink_time = HAL_GetTick();
+        }
+        if (HAL_GetTick() - error_start_time >= 1000) {
+            is_error_active = 0;
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET); // LED Off (Active Low assumed)
+        }
+    }
+}
+void Toggle_LED_NonBlocking(void) {
+    static uint32_t last_tick = 0; // "static" remembers the value between function calls
+    uint32_t current_tick = HAL_GetTick();
+
+    // Check if 500ms have passed since the last toggle
+    if (current_tick - last_tick >= 500) {
+        HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_12); // Change state of PB12
+        last_tick = current_tick;               // Update the timestamp
+    }
+}
 
 /* USER CODE END 4 */
 
