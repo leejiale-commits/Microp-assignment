@@ -610,6 +610,56 @@ void Toggle_LED_NonBlocking(void) {
         last_tick = current_tick;               // Update the timestamp
     }
 }
+void BT_Send(char *msg) {
+    HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
+}
+void Update_Security_Display(SystemState state, char* pass_buffer) {
+    ssd1306_Fill(Black);
+
+    if (state == STATE_ALARM) {
+        // EMERGENCY VISUAL
+        ssd1306_Fill(White);
+        ssd1306_SetCursor(12, 10);
+        ssd1306_WriteString("!! ALARM !!", Font_11x18, Black);
+        ssd1306_SetCursor(18, 35);
+        ssd1306_WriteString("EMERGENCY", Font_7x10, Black);
+    }
+    else {
+        // HEADER
+
+        ssd1306_Line(0, 12, 128, 12, White);
+
+        // SYSTEM STATUS
+        ssd1306_SetCursor(20,0);
+        if(state == STATE_ARMED) ssd1306_WriteString("ARMED", Font_7x10, White);
+        else ssd1306_WriteString("DISARMED", Font_7x10, White);
+
+        // PIN INPUT BOX
+        ssd1306_SetCursor(10, 35);
+        ssd1306_WriteString("PIN:", Font_11x18, White);
+
+        // This displays the actual numbers you type
+        ssd1306_WriteString(pass_buffer, Font_11x18, White);
+
+        ssd1306_SetCursor(110, 35);
+        ssd1306_WriteString("", Font_11x18, White);
+
+        // FOOTER
+        ssd1306_SetCursor(0, 55);
+        ssd1306_WriteString("Press # to Enter", Font_6x8, White);
+    }
+    ssd1306_UpdateScreen();
+}
+
+void Display_Menu(void) {
+    BT_Send("\r\n--- SMART SECURITY MENU ---\r\n");
+    BT_Send("1. DISARM / UNLOCK\r\n");
+    BT_Send("2. ARM / LOCK\r\n");
+    BT_Send("3. SYSTEM STATUS\r\n");
+    BT_Send("4. RESET ALARM\r\n");
+    BT_Send("---------------------------\r\n");
+    BT_Send("Enter choice: ");
+}
 
 /* USER CODE END 4 */
 
